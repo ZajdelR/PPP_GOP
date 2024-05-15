@@ -35,8 +35,13 @@ def load_and_prepare_data(filepath):
 def analyze_by_ac_and_site(data):
     results = {}
     for (interval, ac), group in data.groupby(['Interval', 'Systems']):
-        group_stats = group.groupby('AC')[['Hpe95','Vpe95']].describe()
+        group_stats = group.groupby('AC')[['Hpe95','Vpe95']].quantile(.95)
         results[(interval, ac)] = group_stats
+        
+    results = pd.concat(results).reset_index()
+    columns = list(results.columns)
+    columns[:3] = ['int','sys','sol']
+    results.columns = columns 
     return results
 
 def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3, unit='mm'):
