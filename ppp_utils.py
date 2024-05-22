@@ -32,7 +32,9 @@ def load_and_prepare_data(filepath):
     data.drop(columns=['Solution_AC'], inplace=True)
     return data
 
-def analyze_by_ac_and_site(data):
+def analyze_by_ac_and_site(data,group="total:"):
+    data = data[data['Period'] == group]
+
     results = {}
     for (interval, ac), group in data.groupby(['Interval', 'Systems']):
         group_stats = group.groupby('AC')[['Hpe95','Vpe95']].quantile(.95)
@@ -44,11 +46,11 @@ def analyze_by_ac_and_site(data):
     results.columns = columns 
     return results
 
-def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3, unit='mm'):
+def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3, unit='mm', group = "total:"):
     
     f, ax = plt.subplots(1, 1, figsize=(8.4/2.54, 8/2.54))  # Figure size in inches (converted from cm)
 
-    subset_data = data[(data['Interval'] == period) & (data['Systems'] == strategy)]
+    subset_data = data[(data['Interval'] == period) & (data['Systems'] == strategy) & (data['Period'] == group)]
     subset_data.loc[:, column] *= scaler
     
     subset_data['sort_key'] = subset_data['AC'].apply(lambda x: ('0' if x == 'REF' else '2' if x.startswith('IG') else '1') + x)
@@ -79,36 +81,44 @@ def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3
     plt.savefig(os.path.join(dirs['plots'], f'{column}_{period}_{strategy}.png'),
                 dpi=600)
 
-def heatmap_mean_rate(data, interval, systems, aggfunc='mean'):
+def heatmap_station_specific(data, interval, systems, stat = "Rat", 
+                             refac = 'CST', perc = False, cbar = "RdYlGn",
+                             aggfunc='mean',vmin=80, vmax=100, 
+                             group = "total:", scalar=1e3, rev=''):
     # Calculate mean or other aggregate function of 'Rat' for each 'Site', grouped by 'AC', 'Interval', 'Systems'
-    rat_mean_per_site = data.groupby(['AC', 'Interval', 'Systems', 'Site'])['Rat'].agg(aggfunc).reset_index()
+    data = data[data['Period'] == group]
+    rat_mean_per_site = data.groupby(['AC', 'Interval', 'Systems', 'Site'])[stat].agg(aggfunc).reset_index()
     
     # Filter data for the specified 'Interval' and 'Systems'
     filtered_data = rat_mean_per_site[(rat_mean_per_site['Interval'] == interval) & (rat_mean_per_site['Systems'] == systems)]
     
     # Sort the ACs with 'REF' first and those starting with 'IG' at the end
-    filtered_data['sort_key'] = filtered_data['AC'].apply(lambda x: ('0' if x == 'REF' else '2' if x.startswith('IG') else '1') + x)
+    filtered_data['sort_key'] = filtered_data['AC'].apply(lambda x: ('0' if x == refac else '2' if x.startswith('IG') else '1') + x)
     filtered_data.sort_values('sort_key', inplace=True)
     filtered_data.drop(columns=['sort_key'], inplace=True)
     sorted_columns = filtered_data['AC'].unique()
     
     # Create a pivot table for the heatmap
-    pivot_table = filtered_data.pivot(index="Site", columns="AC", values="Rat")
+    pivot_table = filtered_data.pivot(index="Site", columns="AC", values=stat)*scalar
     
     pivot_table = pivot_table[sorted_columns]
     
+    if perc:
+        pivot_table = (pivot_table.drop(columns=[refac]) - pivot_table[refac].values.reshape(-1, 1)) / pivot_table[refac].values.reshape(-1, 1) * 100
+    
+    pivot_table.loc[f"{aggfunc}-{stat.upper()}"] = pivot_table.mean(axis=0)
     # Plot heatmap
-    plt.figure(figsize=(17.4/2.54, 15/2.54))  # Size in inches
-    sns.heatmap(pivot_table, annot=True, fmt=".2f", 
-                cmap="RdYlGn", linewidths=.5, cbar=False)
-    plt.title(f'Mean Rat by Site and AC \n Solution: {interval}-{systems}')
+    plt.figure(figsize=(10/2.54, 12/2.54))  # Size in inches
+    sns.heatmap(pivot_table, annot=True, fmt=".1f", 
+                cmap=f"{cbar}{rev}", linewidths=.5, cbar=False, vmin=vmin,vmax=vmax)
+    plt.title(f'{aggfunc.upper()} {stat} by Site and AC \n Solution: {interval}-{systems}')
     plt.xlabel('AC')
     plt.ylabel('')
     
     plt.tight_layout(pad=0.01)
     # Check if directories provided and save the plot to file
-    plt.savefig(os.path.join(dirs['plots'],f'HEATMAP_{interval}_{systems}.png'),dpi=600)
-    return pivot_table    
+    plt.savefig(os.path.join(dirs['plots'],f'HEATMAP_{interval}_{systems}_{stat}_{aggfunc}_{int(perc)}.png'),dpi=600)
+    return pivot_table 
     
 def save_results_to_excel(analysis_results, filename):
     with pd.ExcelWriter(os.path.join(dirs['out'],filename+'.xlsx')) as writer:
