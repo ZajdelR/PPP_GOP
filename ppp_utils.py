@@ -31,6 +31,8 @@ def load_and_prepare_data(filepath):
     data.drop(columns=[col for col in data.columns if 'ignore' in col], inplace=True)
     data[['AC', 'Interval', 'Systems']] = data['Solution_AC'].str.split('-', expand=True)
     data.drop(columns=['Solution_AC'], inplace=True)
+    data['AC'] = data['AC'].replace({'CST':'SPOCC',
+                                     'CSC':'SPOCC+'})
     return data
 
 
@@ -56,7 +58,7 @@ def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3
     subset_data.loc[:, column] *= scaler
 
     subset_data['sort_key'] = (subset_data['AC']
-                               .apply(lambda x: ('0' if x == 'REF' else '2' if x.startswith('IG') else '1') + x))
+                               .apply(lambda x: ('0' if x.startswith('SPOCC') else '2' if x.startswith('IG') else '1') + x))
     subset_data.sort_values('sort_key', inplace=True)
     subset_data.drop(columns=['sort_key'], inplace=True)
     sorted_columns = subset_data['AC'].unique()
@@ -86,7 +88,7 @@ def boxplot_interval_systems(data, column, period, strategy, ylim=30, scaler=1e3
 
 
 def create_heatmap_station_specific(data, interval, systems, stat="Rat",
-                                    refac='CST', perc=False,
+                                    refac='SPOCC', perc=False,
                                     aggfunc='mean',
                                     group="total:", scalar=1e3):
     # Calculate mean or other aggregate function of 'Rat' for each 'Site', grouped by 'AC', 'Interval', 'Systems'
@@ -98,8 +100,8 @@ def create_heatmap_station_specific(data, interval, systems, stat="Rat",
         (rat_mean_per_site['Interval'] == interval) & (rat_mean_per_site['Systems'] == systems)]
 
     # Sort the ACs with 'REF' first and those starting with 'IG' at the end
-    filtered_data['sort_key'] = filtered_data['AC'].apply(
-        lambda x: ('0' if x == refac else '2' if x.startswith('IG') else '1') + x)
+    filtered_data.loc[:,'sort_key'] = filtered_data.loc[:,'AC'].apply(
+        lambda x: ('0' if x.startswith(refac) else '2' if x.startswith('IG') else '1') + x)
     filtered_data.sort_values('sort_key', inplace=True)
     filtered_data.drop(columns=['sort_key'], inplace=True)
     sorted_columns = filtered_data['AC'].unique()
@@ -109,28 +111,37 @@ def create_heatmap_station_specific(data, interval, systems, stat="Rat",
 
     pivot_table = pivot_table[sorted_columns]
 
-    if perc:
-        pivot_table = (pivot_table.drop(columns=[refac]) - pivot_table[refac].values.reshape(-1, 1)) / pivot_table[
-            refac].values.reshape(-1, 1) * 100
-
     pivot_table.loc[f"{aggfunc}-{stat.upper()}"] = pivot_table.mean(axis=0)
     # Plot heatmap
+    return pivot_table
+
+def calculate_ratio(pivot_table,refac):
+    pivot_table = (pivot_table.drop(columns=[refac]) - pivot_table[refac].values.reshape(-1, 1)) / pivot_table[
+        refac].values.reshape(-1, 1) * 100
+
+    return pivot_table
+
+def calculate_ratio_toref(df_ref,df_comp):
+    pivot_table = (df_comp - df_ref) / df_ref * 100
+
     return pivot_table
 
 def plot_heatmap(pivot_table, interval, systems, stat="Rat",
                  perc=False, cbar="RdYlGn",
                  aggfunc='mean', vmin=80, vmax=100,
-                 rev=''):
+                 rev='',append_title='',save_suffix=""):
     plt.figure(figsize=(10 / 2.54, 12 / 2.54))  # Size in inches
-    sns.heatmap(pivot_table, annot=True, fmt=".1f",
+    sns.heatmap(pivot_table, annot=True, fmt=".0f",
                 cmap=f"{cbar}{rev}", linewidths=.5, cbar=False, vmin=vmin, vmax=vmax)
-    plt.title(f'{aggfunc.upper()} {stat} by Site and AC \n Solution: {interval}-{systems}')
+    plt.title(f'{aggfunc.upper()} {stat} by Site and AC \n Solution: {interval}-{systems}\n{append_title}')
     plt.xlabel('AC')
     plt.ylabel('')
 
     plt.tight_layout(pad=0.01)
     # Check if directories provided and save the plot to file
-    plt.savefig(os.path.join(dirs['plots'], f'HEATMAP_{interval}_{systems}_{stat}_{aggfunc}_{int(perc)}.png'), dpi=600)
+    plt.savefig(os.path.join(dirs['plots'],
+                             f'HEATMAP_{interval}_{systems}_{stat}_{aggfunc}_{int(perc)}{save_suffix}.png'),
+                dpi=300)
 
 
 def save_results_to_excel(analysis_results, filename):
@@ -138,3 +149,5 @@ def save_results_to_excel(analysis_results, filename):
         for key, df in analysis_results.items():
             interval, sys = key
             df.to_excel(writer, sheet_name=f'{interval}_{sys}')
+
+

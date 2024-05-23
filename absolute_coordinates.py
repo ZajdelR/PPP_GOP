@@ -46,6 +46,8 @@ def read_and_process_file(filepath):
     df = pd.DataFrame(data, columns=columns)
     
     df = df[df.ac != 'REF']
+    df['ac'] = df['ac'].replace({'CST': 'SPOCC',
+                                 'CSC': 'SPOCC+'})
     return df
 
 def filter_solution_df(df, interval, systems, ac):
@@ -148,7 +150,7 @@ df = read_and_process_file(file_path)
 acs = df.ac.unique()
 ints = df.interval.unique()
 
-interval= '30S'
+interval= '01D'
 ref_ac = 'IGS'
 
 helmert = {}
@@ -174,7 +176,7 @@ df_helmert = pd.DataFrame(helmert2).T
 df_helmert[['ac', 'systems', 'interval']] = df_helmert.index.to_series().str.split('_', expand=True)
 df_helmert.set_index(['ac', 'systems', 'interval'],inplace=True)
 
-f,a = plt.subplots(3,1,figsize=(17.3/2.54, 16/2.54),sharex=True)
+f,a = plt.subplots(3,1,figsize=(17.3/2.54, 18/2.54),sharex=True)
 for systems,ax in zip(['Gxxx','GRxx','GREx'],a):
     
     df_h1 = df_helmert.xs(systems, level='systems')

@@ -12,10 +12,10 @@ if __name__ == "__main__":
     
     for systems in data['Systems'].unique():
         pppu.boxplot_interval_systems(data,'Hpe95','01D',systems,30, group=group)
-        pppu.boxplot_interval_systems(data,'Hpe95','01H',systems,100, group=group)
+        # pppu.boxplot_interval_systems(data,'Hpe95','01H',systems,100, group=group)
         pppu.boxplot_interval_systems(data,'Hpe95','30S',systems,200, group=group)
         
         pppu.boxplot_interval_systems(data,'Vpe95','01D',systems,30, group=group)
-        pppu.boxplot_interval_systems(data,'Vpe95','01H',systems,100, group=group)
+        # pppu.boxplot_interval_systems(data,'Vpe95','01H',systems,100, group=group)
         pppu.boxplot_interval_systems(data,'Vpe95','30S',systems,200, group=group)
 
